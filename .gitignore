@@ -1,0 +1,7 @@
+*.out
+figures/
+*.png
+*.log
+perturbed/
+*.nc
+*.txt
