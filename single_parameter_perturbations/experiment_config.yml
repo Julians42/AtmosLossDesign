@@ -1,0 +1,6 @@
+var_names_int: ["pr", "rlut", "rsut", "rsutcs", "rlutcs", "lwp", "clvi", "clivi"]
+var_names_prof: ["ta", "hus", "clw", "cli", "tke", "wa", "hur", "cl"]
+z_levels: [100, 500, 1000, 1500, 2000, 2500, 3000, 4000]
+reduction_start_time: 64800
+reduction_end_time: 108000
+

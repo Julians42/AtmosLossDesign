@@ -1,5 +1,0 @@
-y_var_names: ["ta", "hus", "clw", "cli", "pr", "rlut", "rsut", "rsutcs", "rlutcs", "lwp", "clvi", "clivi"]
-
-reduction_start_time: 64800
-reduction_end_time: 108000
-

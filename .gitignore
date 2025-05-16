@@ -3,5 +3,7 @@ figures/
 *.png
 *.log
 perturbed/
+multisite_perturbed/
+multiseason_smoothed/
 *.nc
 *.txt
