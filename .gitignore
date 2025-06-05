@@ -7,3 +7,6 @@ multisite_perturbed/
 multiseason_smoothed/
 *.nc
 *.txt
+*.hdf5
+*.dat
+*output* 
