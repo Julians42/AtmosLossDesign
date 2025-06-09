@@ -10,3 +10,4 @@ multiseason_smoothed/
 *.hdf5
 *.dat
 *output* 
+*.csv
