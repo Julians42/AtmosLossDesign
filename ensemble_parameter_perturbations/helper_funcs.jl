@@ -127,7 +127,7 @@ function flatten_dict_column!(df::DataFrame, dict_col::Symbol)
     return df
 end
 
-function create_parameter_dataframe(param_stats_df; num_members=100)
+function create_parameter_dataframe(rootdir, param_stats_df; num_members=100)
     # Create empty arrays to store values and keys for each member
     all_vals = []
     all_keys = []
@@ -139,7 +139,7 @@ function create_parameter_dataframe(param_stats_df; num_members=100)
         push!(members, member)
         
         # Get normalized parameters for this member
-        norm_params = normalize_parameters("output_2/$member/parameter.toml", param_stats_df)
+        norm_params = normalize_parameters("$rootdir/$member/parameter.toml", param_stats_df)
         
         val_array = []
         key_array = []
@@ -170,7 +170,7 @@ function create_parameter_dataframe(param_stats_df; num_members=100)
 end
 
 
-function postprocess_dataframe(df::DataFrame)
+function postprocess_dataframe(df::DataFrame, param_stats_df::DataFrame, num_members::Int, rootdir::String)
     df = filter(row -> !isnan(row.statistic), df)
 
     stats_unique = collect(Set(df.variable))
@@ -194,7 +194,7 @@ function postprocess_dataframe(df::DataFrame)
     end, eachrow(df))
 
     # merge in the normalized parameter dataframe
-    parameter_df = create_parameter_dataframe(param_stats_df, num_members = 100)
+    parameter_df = create_parameter_dataframe(rootdir,param_stats_df, num_members = num_members)
     combined_df = innerjoin(df, parameter_df; on=:member)
 
     return combined_df
@@ -263,12 +263,18 @@ end
 
 
 function get_regression_coefficients(df::DataFrame, variable::String)
-    t = filter(row -> row.variable == variable, df)[:, [:member, :site, :normalized_statistic, :values]]
-    parameter_df = DataFrame(transpose(hcat(t.values...)), :auto)
+    t = filter(row -> row.variable == variable, df)[:, [:member, :site, :normalized_statistic, :values, :keys]]
+    parameter_df = DataFrame(transpose(hcat(t.values...)), Symbol.(t.keys[1]))
     combined_df = hcat(t[:, [:member, :site, :normalized_statistic]], parameter_df)
-    test_formula = @formula(normalized_statistic ~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10 + x11 + x12 + x13 + x14 + x15 + x16 + x17 + x18 + x19 + x20 + x21 + x22 + x23 + fe(site))
+    
+    # Get parameter column names and construct formula dynamically
+    param_cols = names(parameter_df)
+    param_terms = join(param_cols, " + ")
+    formula_str = "normalized_statistic ~ $param_terms + fe(site)"
+    test_formula = eval(Meta.parse("@formula($formula_str)"))
+    
     model = reg(combined_df, test_formula)
-    return model.coef
+    return model.coef, model.coefnames
 end
 
 
@@ -278,25 +284,25 @@ end
 Compute regression coefficients for all variables in the configuration.
 Returns a tuple containing the coefficient array and variable names.
 """
-function compute_regression_coefficients(df_cleaned::DataFrame, config::Dict)
+function compute_regression_coefficients(df_cleaned::DataFrame, informing_variables::Vector{String})
     coef_ar = []
-    var_names = []
-    for var in get_all_variables(config)
+    coef_names = []
+    for var in informing_variables
         try
             # get regression coefficients
-            coef = get_regression_coefficients(df_cleaned, var)
+            coef, coef_name = get_regression_coefficients(df_cleaned, var)
             push!(coef_ar, coef)
-            push!(var_names, var)
+            push!(coef_names, coef_name)
         catch
             println(var, " failed")
         end
     end
     coef_ar = hcat(coef_ar...)
-    return coef_ar, var_names
+    return coef_ar, coef_names[1]
 end
 
 function get_all_variables(config::Dict)
-    all_vars =[]
+    all_vars = String[]
     for var in config["var_names_prof"]
         for zlev in config["z_levels"]
             push!(all_vars, join([var, zlev], "_"))
@@ -318,8 +324,7 @@ Create and save four plots analyzing the regression coefficients matrix B:
 
 Each plot is saved separately with the experiment name in the filename.
 """
-function plot_regression_analysis(B_matrix::Matrix, B_names::Vector, param_names::Vector, config::Dict)
-    exp_name = config["exp_name"]
+function plot_regression_analysis(B_matrix::Matrix, B_names::Vector, param_names::Vector, exp_name::String)
     
     # Plot 1: Scree plot of parameter informed dimension
     fig1 = Figure(size = (500, 400))
@@ -331,23 +336,23 @@ function plot_regression_analysis(B_matrix::Matrix, B_names::Vector, param_names
              svd(B_matrix * transpose(B_matrix)).S)
     save("plots/$(exp_name)_scree_param_informed.png", fig1)
 
-    # Plot 2: Scree plot of variable informative dimension
-    fig2 = Figure(size = (500, 400))
-    ax2 = Axis(fig2[1,1], 
-        xlabel = "Dimension",
-        yscale = log10,
-        ylabel = "Eigenvalue of BᵀB",
-        title = "Scree plot of variable informative dimension ($(exp_name))")
-    scatter!(ax2, 1:length(svd(transpose(B_matrix) * B_matrix).S), 
-             svd(transpose(B_matrix) * B_matrix).S)
-    save("plots/$(exp_name)_scree_var_informed.png", fig2)
+    # # Plot 2: Scree plot of variable informative dimension
+    # fig2 = Figure(size = (500, 400))
+    # ax2 = Axis(fig2[1,1], 
+    #     xlabel = "Dimension",
+    #     yscale = log10,
+    #     ylabel = "Eigenvalue of BᵀB",
+    #     title = "Scree plot of variable informative dimension ($(exp_name))")
+    # scatter!(ax2, 1:length(svd(transpose(B_matrix) * B_matrix).S), 
+    #          svd(transpose(B_matrix) * B_matrix).S)
+    # save("plots/$(exp_name)_scree_var_informed.png", fig2)
 
     # Calculate diagonal values
     parameter_informed_diag = diag(B_matrix * transpose(B_matrix))
     variable_informed_diag = diag(transpose(B_matrix) * B_matrix)
 
     # Plot 3: Parameter informed bar plot
-    fig3 = Figure(size = (800, 400))
+    fig3 = Figure(size = (400, 400))
     ax3 = Axis(fig3[1,1],
         xlabel = "Parameter",
         ylabel = "Diagonal value of BBᵀ",
@@ -373,10 +378,16 @@ function plot_regression_analysis(B_matrix::Matrix, B_names::Vector, param_names
     sorted_var_vals = variable_informed_diag[sorted_var_inds]
     sorted_var_names = B_names[sorted_var_inds]
 
+    # filter to variables with sufficient information content relative to the most informative variable
+    important_var_inds = sorted_var_vals .> 0.05 * sorted_var_vals[1]
+    sorted_var_vals = sorted_var_vals[important_var_inds]
+    sorted_var_inds = sorted_var_inds[important_var_inds]
+    sorted_var_names = sorted_var_names[important_var_inds]
+
     barplot!(ax4, 1:length(sorted_var_vals), sorted_var_vals)
     ax4.xticks = (1:length(sorted_var_names), sorted_var_names)
     ax4.xticklabelrotation = π/2
     save("plots/$(exp_name)_var_informed.png", fig4)
 
-    return fig1, fig2, fig3, fig4
+    return sorted_var_vals, sorted_var_inds, sorted_var_names
 end

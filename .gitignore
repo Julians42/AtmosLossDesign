@@ -11,3 +11,5 @@ multiseason_smoothed/
 *.dat
 *output* 
 *.csv
+
+ClimaAtmos.jl/
