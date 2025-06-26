@@ -12,4 +12,4 @@ multiseason_smoothed/
 *output* 
 *.csv
 
-ClimaAtmos.jl/
+*.jld2
