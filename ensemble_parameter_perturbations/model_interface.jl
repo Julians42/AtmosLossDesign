@@ -37,7 +37,7 @@ using Distributed
 end
 
 function forward_model(parameter_path, lat, lon, start_date)
-    base_config_dict = YAML.load_file(joinpath(@__DIR__, "prognostic_edmfx_tv_era5driven_column.yml"))
+    base_config_dict = YAML.load_file(joinpath(@__DIR__, "diagnostic_edmfx_diurnal_scm_imp.yml"))
     config_dict = deepcopy(base_config_dict)
 
     # update the config_dict with site latitude / longitude

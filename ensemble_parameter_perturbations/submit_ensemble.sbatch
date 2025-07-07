@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --ntasks=200
-#SBATCH --time=4:00:00
+#SBATCH --ntasks=400
+#SBATCH --time=12:00:00
 #SBATCH --mem-per-cpu=12G
 #SBATCH --cpus-per-task=1  # CPUs per task
 #SBATCH -o workers.txt

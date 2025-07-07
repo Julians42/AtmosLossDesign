@@ -4,7 +4,7 @@ import EnsembleKalmanProcesses as EKP
 import ClimaCalibrate as CAL
 using Glob
 
-num_procs = 200
+num_procs = 400
 ensemble_size = 100
 
 lats = [
@@ -20,9 +20,9 @@ lons = [
 ]
 start_dates = ["20070101", "20070401", "20070701", "20071001"]
 
-output_dir = "output_2"
+output_dir = "output_4_diagnostic_edmfx"
 toml_path_name = "parameter"
-prior = CAL.get_prior("prior.toml")
+prior = CAL.get_prior("priors/prior_diagnostic_pi_entr_smooth_entr_detr_coarse_amip_new.toml")
 
 # sample from the parameter distribution and write the elements to the toml files. 
 param_array = EKP.construct_initial_ensemble(prior, ensemble_size)
@@ -34,7 +34,7 @@ toml_list = glob(joinpath(output_dir, "member_*", toml_path_name * ".toml"))
 
 addprocs(
     CAL.SlurmManager(num_procs),
-    t = "4:00:00",
+    t = "12:00:00",
     mem_per_cpu = "12G",
     cpus_per_task = "1",
 )

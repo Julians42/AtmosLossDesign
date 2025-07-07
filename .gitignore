@@ -13,3 +13,5 @@ multiseason_smoothed/
 *.csv
 
 *.jld2
+
+*.err
