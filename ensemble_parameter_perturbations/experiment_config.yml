@@ -1,7 +1,9 @@
 var_names_int: ["pr", "rlut", "rsut", "rsutcs", "rlutcs", "lwp", "clvi", "clivi", "dsevi"]
 var_names_prof: ["ta", "hus", "clw", "cli", "tke", "wa", "hur", "cl", "arup", "entr"]
 z_levels: [100, 300, 500, 700, 850, 1000, 1150, 1300, 1500, 2000, 2500, 3000, 4000]
-reduction_start_time: 64800
-reduction_end_time: 108000
-exp_name: "expanded_levels"
-prior_path: "prior.toml"
+reduction_start_time: 345600 # 4 days 
+reduction_end_time: 950400 # 11 days - 1 week total integrated time
+exp_name: "diagnostic_edmfx"
+prior_path: "priors/prior_diagnostic_pi_entr_smooth_entr_detr_coarse_amip_new.toml"
+output_dir: "output_4_diagnostic_edmfx"
+toml_path_name: "parameter"

@@ -1,3 +1,4 @@
+import Pkg; Pkg.activate(".")
 import EnsembleKalmanProcesses as EKP
 import ScikitLearn
 import YAML
@@ -17,26 +18,26 @@ using TOML
 using LinearAlgebra
 
 
-includet("helper_funcs.jl")
+include("helper_funcs.jl")
 config = YAML.load_file("experiment_config.yml");
 
 # compute the normalization coefficients for the prior
-param_stats_df = compute_parameter_statistics("prior.toml")
+param_stats_df = compute_parameter_statistics(config["prior_path"])
 
 # example usage:
 # ex_norm_params = normalize_parameters("output_2/member_001/parameter.toml", param_stats_df)
 
 # get a list of the number of members and the sites that we are running for these experiments
 # eventually we'll want a dictionary of the total sites
-members = basename.(glob("output_2/*"))
-sites = Set(basename.(glob("output_2/*/*")))
+members = basename.(glob(config["output_dir"] * "/*"))
+sites = Set(basename.(glob(config["output_dir"] * "/*/*")))
 pop!(sites, "parameter.toml")
 sites = collect(sites)
 
 # process the statistics for the dataframe
 df = process_members_sites(members, sites, param_stats_df, config)
 
-CSV.write("dataframes/$(config["exp_name"]).csv", df)
+CSV.write("dataframes/$(config["exp_name"]).csv", df) 
 
 # clean up dataframe and write cleaned version as well
 df_cleaned = postprocess_dataframe(df)
