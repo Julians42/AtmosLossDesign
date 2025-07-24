@@ -207,44 +207,66 @@ function process_members_sites(members, sites, param_stats_df, config)
     data_vars = vcat(config["var_names_int"], config["var_names_prof"])
 
     for member in members
+        @info "Processing member $member"
         # Get normalized parameters for this member
         norm_params = normalize_parameters("$(config["output_dir"])/$member/parameter.toml", param_stats_df)
         
         for site in sites
-            sim_dir = SimDir(joinpath(config["output_dir"], member, site, "output_active"))
+            site_data_path = joinpath(config["output_dir"], member, site, "output_active")
+            sim_dir = SimDir(site_data_path)
+            # get the type of convection from the .yml file
+            forcing_type = YAML.load_file(joinpath(site_data_path, ".yml"))
+            
+            # Determine z_levels based on whether "deep" or "shallow" appears in TOML files
+            toml_files = forcing_type["toml"]
+            toml_string = join(toml_files, " ")
+            if occursin("deep", toml_string)
+                z_levels = collect(100:200:10000)  # z_levels_deep
+                convection_type = "deep"
+            elseif occursin("shallow", toml_string)
+                z_levels = collect(100:100:4000)   # z_levels_shallow
+                convection_type = "shallow"
+            else
+                @error "No deep or shallow forcing found in $site_data_path. Revise script..."
+                convection_type = "unknown"
+                #z_levels = config["z_levels"]  # could fallback to config default
+            end
             try
                 for data_var in data_vars
                     data = get(sim_dir; short_name = data_var, reduction = "inst")
 
                     if data.dims["time"][end] < config["reduction_end_time"]
-                        throw()
+                        throw(ErrorException("Simulation time too short"))
                     else
                         profile_data = window(data, "time";
                                             left=config["reduction_start_time"],
                                             right=config["reduction_end_time"])
                         averaged_profile = average_time(slice(profile_data, x=0, y=0))
 
-                        if !haskey(averaged_profile.dims, "z")
-                            stat = averaged_profile.data[1]
+                                            if !haskey(averaged_profile.dims, "z")
+                        stat = averaged_profile.data[1]
+                        push!(rows, (
+                            member = member,
+                            site = site,
+                            variable = data_var,
+                            statistic = stat,
+                            convection_type = convection_type,
+                        ))
+                        else
+                                                    for zlev in z_levels
+                            stat = slice(averaged_profile, z=zlev).data[1]
                             push!(rows, (
                                 member = member,
                                 site = site,
-                                variable = data_var,
+                                variable = join([data_var, zlev], "_"),
                                 statistic = stat,
+                                convection_type = convection_type,
                             ))
-                        else
-                            for zlev in config["z_levels"]
-                                stat = slice(averaged_profile, z=zlev).data[1]
-                                push!(rows, (
-                                    member = member,
-                                    site = site,
-                                    variable = join([data_var, zlev], "_"),
-                                    statistic = stat,
-                                ))
                             end
                         end
                     end
                 end
+                println("completed processing $member and $site")
             catch
                 @info "Simulation failed for $member and $site. Appending NaNs..."
                 push!(rows, (
@@ -252,6 +274,7 @@ function process_members_sites(members, sites, param_stats_df, config)
                     site = site,
                     variable = NaN,
                     statistic = NaN,
+                    convection_type = convection_type,
                 ))
             end
         end

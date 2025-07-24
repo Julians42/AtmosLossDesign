@@ -2,22 +2,32 @@
 
 import ClimaAtmos as CA
 using ClimaUtilities.ClimaArtifacts 
+using NCDatasets
 
 # define the sites and dates we want to use
 
-lats = [
-    -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -18.5, -17.0,
-    -15.5, -14.0, -12.5, -11.0, -9.5, -8.0, 35.0, 32.0,
-    29.0, 23.0, 20.0, 17.0
-]
+# lats = [
+#     -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -18.5, -17.0,
+#     -15.5, -14.0, -12.5, -11.0, -9.5, -8.0, 35.0, 32.0,
+#     29.0, 23.0, 20.0, 17.0
+# ]
 
-lons = [
-    -72.5, -75.0, -77.5, -80.0, -82.5, -85.0, -90.0, -95.0,
-    -100.0, -105.0, -110.0, -115.0, -120.0, -125.1000061,
-    -125.0, -129.0, -133.0, -141.0, -145.0, -149.0
-]
+# lons = [
+#     -72.5, -75.0, -77.5, -80.0, -82.5, -85.0, -90.0, -95.0,
+#     -100.0, -105.0, -110.0, -115.0, -120.0, -125.1000061,
+#     -125.0, -129.0, -133.0, -141.0, -145.0, -149.0
+# ]
+# start_dates = ["20070101", "20070401", "20070701", "20071001"]
+
+ds = NCDataset("../coszen_data.nc")
+
+lats, lons = [], []
+for site in 1:119
+    push!(lats, ds["lat"][site])
+    push!(lons, (ds["lon"][site] + 180.0) % 360.0 - 180.0)
+end
+
 start_dates = ["20070101", "20070401", "20070701", "20071001"]
-
 
 for start_date in start_dates
     for i in 1:lastindex(lats)
@@ -34,7 +44,7 @@ for start_date in start_dates
         # generate monthly forcing file for this site
         if !isfile(forcing_file_path) || !CA.check_monthly_forcing_times(forcing_file_path, single_parsed_args)
             CA.generate_external_forcing_file(single_parsed_args, forcing_file_path, Float32; 
-            data_dir = joinpath(@clima_artifact("era5_hourly_atmos_raw"), "monthly"),
+            input_data_dir = joinpath(@clima_artifact("era5_hourly_atmos_raw"), "monthly"),
             data_strs = [
                 "monthly_diurnal_profiles",
                 "monthly_diurnal_inst",

@@ -36,7 +36,7 @@ using Distributed
     end
 end
 
-function forward_model(parameter_path, lat, lon, start_date)
+function forward_model(parameter_path, lat, lon, start_date, relaxation_toml)
     base_config_dict = YAML.load_file(joinpath(@__DIR__, "diagnostic_edmfx_diurnal_scm_imp.yml"))
     config_dict = deepcopy(base_config_dict)
 
@@ -58,6 +58,9 @@ function forward_model(parameter_path, lat, lon, start_date)
         config_dict["toml"] = [parameter_path]
     end
 
+    # depending on the simulation type, we need to change the relaxation coefficients
+    push!(config_dict["toml"], relaxation_toml)
+    
     comms_ctx = ClimaComms.SingletonCommsContext()
     config = CA.AtmosConfig(config_dict; comms_ctx)
 
@@ -82,24 +85,53 @@ function run_iteration(
     ensemble_size,
     lats, 
     lons,
-    start_dates; 
+    start_dates,    
+    relaxation_tomls; 
     worker_pool = default_worker_pool(),
 )
     @sync begin 
         for start_date in start_dates
-            for (site_index, (lat, lon)) in enumerate(zip(lats, lons))
+            for (site_index, (lat, lon, relaxation_toml)) in enumerate(zip(lats, lons, relaxation_tomls))
                 for m in 1:ensemble_size
                     @async begin
                         worker = take!(worker_pool)
                         try
                             @show worker site_index m
                             # Pass lat and lon into forward_model
-                            remotecall_wait(forward_model, worker, parameter_paths[m], lat, lon, start_date)
+                            remotecall_wait(forward_model, worker, parameter_paths[m], lat, lon, start_date, relaxation_toml)
                         catch e
                             @warn "Error in worker $(worker) at site $(site_index) for start date $(start_date): $(e)"
                         finally
                             put!(worker_pool, worker)
                         end
+                    end
+                end
+            end
+        end
+    end
+end
+
+
+
+
+function run_iteration_debug(
+    parameter_paths,
+    ensemble_size,
+    lats, 
+    lons,
+    relaxation_tomls,
+    start_dates; 
+    worker_pool = default_worker_pool(),
+)
+    @sync begin 
+        for start_date in start_dates
+            for (site_index, (lat, lon, relaxation_toml)) in enumerate(zip(lats, lons, relaxation_tomls))
+                for m in 1:ensemble_size
+                    @async begin
+                        worker = take!(worker_pool)
+                        @show worker site_index m
+                        # Pass lat and lon into forward_model
+                        remotecall_wait(forward_model, worker, parameter_paths[m], lat, lon, start_date, relaxation_toml)
                     end
                 end
             end

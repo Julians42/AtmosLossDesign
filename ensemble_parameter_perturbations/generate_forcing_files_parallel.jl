@@ -5,28 +5,26 @@ using Distributed
 # Add worker processes (will be managed by SLURM)
 if nprocs() == 1
     # Add workers based on SLURM_NTASKS or default to 40
-    n_workers = haskey(ENV, "SLURM_NTASKS") ? parse(Int, ENV["SLURM_NTASKS"]) - 1 : 39
+    n_workers = haskey(ENV, "SLURM_NTASKS") ? parse(Int, ENV["SLURM_NTASKS"]) - 1 : 60
     addprocs(n_workers)
 end
 
 @everywhere begin
     import ClimaAtmos as CA
-    using ClimaUtilities.ClimaArtifacts 
+    using ClimaUtilities.ClimaArtifacts
+    using NCDatasets
 end
 
-# define the sites and dates we want to use
-lats = [
-    -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -18.5, -17.0,
-    -15.5, -14.0, -12.5, -11.0, -9.5, -8.0, 35.0, 32.0,
-    29.0, 23.0, 20.0, 17.0
-]
+# Read sites from NetCDF file
+ds = NCDataset("../coszen_data.nc")
 
-lons = [
-    -72.5, -75.0, -77.5, -80.0, -82.5, -85.0, -90.0, -95.0,
-    -100.0, -105.0, -110.0, -115.0, -120.0, -125.1000061,
-    -125.0, -129.0, -133.0, -141.0, -145.0, -149.0
-]
-start_dates = ["20070101", "20070401", "20070701", "20071001"]
+lats, lons = [], []
+for site in 1:119
+    push!(lats, ds["lat"][site])
+    push!(lons, (ds["lon"][site] + 180.0) % 360.0 - 180.0)
+end
+
+start_dates = ["20070401", "20070701", "20071001"]
 
 # Create all combinations of work to be done
 work_items = []
@@ -50,24 +48,27 @@ println("Number of workers: $(nworkers())")
             "site_longitude" => lon,
         )
         
-        # get the forcing file path 
+        # Get the forcing file path 
         forcing_file_path = CA.get_external_monthly_forcing_file_path(single_parsed_args)
         
         # Log progress
         worker_id = myid()
         println("Worker $worker_id processing site $site_index (lat=$lat, lon=$lon, date=$start_date)")
-        println("Worker $worker_id: Forcing file path: $forcing_file_path")
         
-        # generate monthly forcing file for this site
-        CA.generate_external_forcing_file(single_parsed_args, forcing_file_path, Float32; 
-            data_dir = joinpath(@clima_artifact("era5_hourly_atmos_raw"), "monthly"),
-            data_strs = [
-                "monthly_diurnal_profiles",
-                "monthly_diurnal_inst",
-                "monthly_diurnal_accum",
-            ])
+        # Check if file exists and passes time check before generating
+        if !isfile(forcing_file_path) || !CA.check_monthly_forcing_times(forcing_file_path, single_parsed_args)
+            CA.generate_external_forcing_file(single_parsed_args, forcing_file_path, Float32; 
+                input_data_dir = joinpath(@clima_artifact("era5_hourly_atmos_raw"), "monthly"),
+                data_strs = [
+                    "monthly_diurnal_profiles",
+                    "monthly_diurnal_inst",
+                    "monthly_diurnal_accum",
+                ])
+            println("Worker $worker_id completed site $site_index")
+        else
+            println("Worker $worker_id: forcing file already exists for site $site_index")
+        end
         
-        println("Worker $worker_id completed site $site_index")
         return (true, site_index, start_date, nothing)
         
     catch e

@@ -117,8 +117,8 @@ for profile_var in all_configs["realistic_no_surface_levels"]["var_names_prof"]
     matching_indx = getindex.(split.(informing_variables, "_"), 1) .== profile_var
     # get variable informed array
     var_informed_ar = transpose(reg_coefs[:, matching_indx]) * reg_coefs[:, matching_indx]
-    println(profile_var, " ", tr(var_informed_ar))
-    println(profile_var, " ", sum(matching_indx))
+    # println(profile_var, " ", tr(var_informed_ar))
+    # println(profile_var, " ", sum(matching_indx))
     push!(var_informing_ar, [profile_var, tr(var_informed_ar)])
 end
 

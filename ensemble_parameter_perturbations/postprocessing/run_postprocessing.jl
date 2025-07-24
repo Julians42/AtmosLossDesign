@@ -1,4 +1,4 @@
-import Pkg; Pkg.activate(".")
+# import Pkg; Pkg.activate(".")
 import EnsembleKalmanProcesses as EKP
 import ScikitLearn
 import YAML
@@ -24,6 +24,10 @@ config = YAML.load_file("experiment_config.yml");
 # compute the normalization coefficients for the prior
 param_stats_df = compute_parameter_statistics(config["prior_path"])
 
+# currently set in helper_funcs.jl
+# z_levels_shallow = collect(100:100:4000)
+# z_levels_deep = collect(100:200:10000)
+
 # example usage:
 # ex_norm_params = normalize_parameters("output_2/member_001/parameter.toml", param_stats_df)
 
@@ -38,6 +42,7 @@ sites = collect(sites)
 df = process_members_sites(members, sites, param_stats_df, config)
 
 CSV.write("dataframes/$(config["exp_name"]).csv", df) 
+println("completed processing dataframes")
 
 # clean up dataframe and write cleaned version as well
 df_cleaned = postprocess_dataframe(df)
@@ -47,10 +52,10 @@ CSV.write("dataframes/$(config["exp_name"])_cleaned.csv", df_cleaned)
 
 
 # compute the B matrix for the cleaned dataframe
-B_matrix, B_names = compute_regression_coefficients(df_cleaned, config)
+# B_matrix, B_names = compute_regression_coefficients(df_cleaned, config)
 
 
-# visualize
-param_names = first(df_cleaned).keys
-figs = plot_regression_analysis(B_matrix, B_names, param_names, config)
+# # visualize
+# param_names = first(df_cleaned).keys
+# figs = plot_regression_analysis(B_matrix, B_names, param_names, config)
 
