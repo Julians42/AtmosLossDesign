@@ -19,96 +19,120 @@ import CSV
 using LinearAlgebra
 using FixedEffectModels
 import TOML
+using Glob
 
 include("helper_funcs.jl")
 
 # load the config
 config = YAML.load_file("experiment_config.yml")
 
-# load and clean dataframe 
-df = CSV.read("dataframes/$(config["exp_name"]).csv", DataFrame)
+# read in all 100 dataframes into one concatenated dataframe
+# df = CSV.read("dataframes/$(config["exp_name"]).csv", DataFrame)
+df = @. CSV.read(glob("postprocessing/dataframes/diagnostic_edmfx/*.csv"), DataFrame) 
 param_stats = compute_parameter_statistics(config["prior_path"])
 df_cleaned = postprocess_dataframe(df, param_stats, 100, "output_5_cfsites")
 
-# compute regression coefficients
-informing_variables = get_all_variables(config) # default is using all variables
-reg_coefs, coef_names, failed_indices = compute_regression_coefficients(df_cleaned, informing_variables)
+# compute regression coefficients for deep and shallow separately
+informing_variables_deep = get_all_variables(config, Config_cfsites_deep()) 
+informing_variables_shallow = get_all_variables(config, Config_cfsites_shallow()) 
+informing_variables = union(informing_variables_deep, informing_variables_shallow)
+reg_coefs, coef_names, failed_indices = compute_regression_coefficients_optimized(df_cleaned, informing_variables)
 # remove the failed regression variables from the list of names 
 informing_variables = informing_variables[setdiff(1:end, failed_indices)]
 
 
-sorted_var_vals, sorted_var_inds, sorted_var_names = plot_regression_analysis(reg_coefs, informing_variables, coef_names, config["exp_name"])
-
-include("utils/elbow_calculation.jl")
-eigs = svd(reg_coefs*reg_coefs').S
-
-println("Kneedle method: ", dimension_by_kneedle(eigs))
-println("Second derivative method: ", elbow_second_derivative(eigs))
-println("95% variance method: ", elbow_percentage_cutoff(eigs))
+sorted_var_vals, sorted_var_inds, sorted_var_names = plot_regression_analysis(reg_coefs, informing_variables, coef_names, config)
 
 all_configs = Dict("full_variables" =>
     Dict(
         "var_names_int" => ["pr", "rlut", "rsut", "rsutcs", "rlutcs", "lwp", "clvi", "clivi", "dsevi"],
         "var_names_prof" => ["ta", "hus", "clw", "cli", "tke", "wa", "hur", "cl", "arup", "entr"],
-        "z_levels" => [100, 300, 500, 700, 850, 1000, 1150, 1300, 1500, 2000, 2500, 3000, 4000],
+        "z_levels" => Dict("shallow" => [100, 100, 4000], "deep" => [100, 100, 10000]),
         "exp_name" => "full_variables",
     ),
     "realistic_variables" =>
     Dict(
         "var_names_int" => ["pr", "rlut", "rsut", "rsutcs", "rlutcs", "lwp", "clvi", "clivi"],
         "var_names_prof" => ["ta", "hus", "clw", "cli", "hur", "cl"],
-        "z_levels" => [100, 300, 500, 700, 850, 1000, 1150, 1300, 1500, 2000, 2500, 3000, 4000],
+        "z_levels" => Dict("shallow" => [100, 100, 4000], "deep" => [100, 100, 10000]),
         "exp_name" => "realistic_variables",
     ),
-    "realistic_no_advanced_clouds" =>
+    "no_advanced_clouds" =>
     Dict(
         "var_names_int" => ["pr", "rlut", "rsut", "rsutcs", "rlutcs"],
         "var_names_prof" => ["ta", "hus", "hur"],
-        "z_levels" => [100, 300, 500, 700, 850, 1000, 1150, 1300, 1500, 2000, 2500, 3000, 4000],
+        "z_levels" => Dict("shallow" => [100, 100, 4000], "deep" => [100, 100, 10000]),
         "exp_name" => "realistic_no_advanced_clouds",
-    ),
-    "realistic_no_surface_levels" =>
-    Dict(
-        "var_names_int" => ["pr", "rlut", "rsut", "rsutcs", "rlutcs", "lwp", "clvi", "clivi"],
-        "var_names_prof" => ["ta", "hus", "clw", "cli", "hur", "cl"],
-        "z_levels" => [500, 1000, 1500, 2000, 2500, 3000, 4000],
-        "exp_name" => "realistic_no_surface_levels",
     ),
     "realistic_plus_tke" => 
     Dict(
         "var_names_int" => ["pr", "rlut", "rsut", "rsutcs", "rlutcs", "lwp", "clvi", "clivi"],
         "var_names_prof" => ["ta", "hus", "clw", "cli", "tke", "hur", "cl"],   
-        "z_levels" => [100, 300, 500, 700, 850, 1000, 1150, 1300, 1500, 2000, 2500, 3000, 4000],
+        "z_levels" => Dict("shallow" => [100, 100, 4000], "deep" => [100, 100, 10000]),
         "exp_name" => "realistic_plus_tke",
+    ),
+    "integrated_clouds" =>
+    Dict(
+        "var_names_int" => ["pr", "rlut", "rsut", "rsutcs", "rlutcs", "lwp", "clvi", "clivi"],
+        "var_names_prof" => ["ta", "hus"],
+        "z_levels" => Dict("shallow" => [100, 100, 4000], "deep" => [100, 100, 10000]),
+        "exp_name" => "integrated_clouds",
+    ),
+    "realistic_plus_entr" =>
+    Dict(
+        "var_names_int" => ["pr", "rlut", "rsut", "rsutcs", "rlutcs", "lwp", "clvi", "clivi"],
+        "var_names_prof" => ["ta", "hus", "clw", "cli", "tke", "hur", "cl", "arup", "entr"],
+        "z_levels" => Dict("shallow" => [100, 100, 4000], "deep" => [100, 100, 10000]),
+        "exp_name" => "realistic_plus_entr",
+    ),
+    "realistic_no_surface_levels" =>
+    Dict(
+        "var_names_int" => ["pr", "rlut", "rsut", "rsutcs", "rlutcs", "lwp", "clvi", "clivi"],
+        "var_names_prof" => ["ta", "hus", "clw", "cli", "hur", "cl"],
+        "z_levels" => Dict("shallow" => [1000, 100, 4000], "deep" => [1000, 100, 10000]),
+        "exp_name" => "realistic_no_surface_levels",
     )
 )
 
 
 for (key, value) in all_configs
 
-    informing_variables = get_all_variables(value) # default is using all variables
-    println(length(informing_variables), " variables")
-    reg_coefs, coef_names, failed_indices = compute_regression_coefficients(df_cleaned, informing_variables);
+    # Get variables for both deep and shallow convection separately
+    informing_variables_deep_config = get_all_variables(value, Config_cfsites_deep())
+    informing_variables_shallow_config = get_all_variables(value, Config_cfsites_shallow())
+    informing_variables_config = union(informing_variables_deep_config, informing_variables_shallow_config)
+    
+    println("$(value["exp_name"]): $(length(informing_variables_config)) variables ($(length(informing_variables_deep_config)) deep + $(length(informing_variables_shallow_config)) shallow)")
+    
+    reg_coefs, coef_names, failed_indices = compute_regression_coefficients_optimized(df_cleaned, informing_variables_config);
 
     # remove the failed regression variables from the list of names 
-    informing_variables = informing_variables[setdiff(1:end, failed_indices)]
+    informing_variables_config = informing_variables_config[setdiff(1:end, failed_indices)]
 
-    eigs = svd(reg_coefs*reg_coefs').S
+    # eigs = svd(reg_coefs*reg_coefs').S
 
-    println(value["exp_name"])
-    println("Kneedle method: ", dimension_by_kneedle(eigs))
-    println("Second derivative method: ", elbow_second_derivative(eigs))
-    println("95% variance method: ", elbow_percentage_cutoff(eigs))
-    println("Number of eigs larger than 0.05: ", sum(eigs .> 0.05))
-    println("--------------------------------")
+    # println(value["exp_name"])
+    # println("Kneedle method: ", dimension_by_kneedle(eigs))
+    # println("Second derivative method: ", elbow_second_derivative(eigs))
+    # println("95% variance method: ", elbow_percentage_cutoff(eigs))
+    # println("Number of eigs larger than 0.05: ", sum(eigs .> 0.05))
+    # println("--------------------------------")
 
-    sorted_var_vals, sorted_var_inds, sorted_var_names = plot_regression_analysis(reg_coefs, informing_variables, coef_names, value)
+    sorted_var_vals, sorted_var_inds, sorted_var_names = plot_regression_analysis(reg_coefs, informing_variables_config, coef_names, value)
 end
 
 
+
+
+
+
+
 # integrate the profile variables by computing the trace of the submatrix of the regression coefficients
-informing_variables_all = get_all_variables(all_configs["realistic_no_surface_levels"])
-reg_coefs, coef_names, failed_indices = compute_regression_coefficients(df_cleaned, informing_variables_all);
+informing_variables_all = union(
+    get_all_variables(all_configs["realistic_no_surface_levels"], Config_cfsites_deep()),
+    get_all_variables(all_configs["realistic_no_surface_levels"], Config_cfsites_shallow())
+)
+reg_coefs, coef_names, failed_indices = compute_regression_coefficients_optimized(df_cleaned, informing_variables_all);
 informing_variables = informing_variables_all[setdiff(1:end, failed_indices)]
 
 

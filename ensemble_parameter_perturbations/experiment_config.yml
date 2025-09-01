@@ -14,3 +14,8 @@ toml_path_name: "parameter"
 forcing_toml_files:
   shallow: "tomls/shallow_forcing_relaxation.toml"
   deep: "tomls/deep_forcing_relaxation.toml"
+
+
+z_levels: # [start, step, stop]
+  shallow: [100, 100, 4000]
+  deep: [100, 100, 10000]
