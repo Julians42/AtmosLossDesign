@@ -21,7 +21,7 @@ using FixedEffectModels
 import TOML
 using Glob
 
-include("helper_funcs.jl")
+include("new_helper_funcs.jl")
 
 # load the config
 config = YAML.load_file("experiment_config.yml")
