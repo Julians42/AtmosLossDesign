@@ -11,27 +11,34 @@ function information_gain(variables, df, grad_method::GradientApproximationMetho
     ∇G = gradient_approximation(df_sub, variables, constrained_params, param_ordering, grad_method)'
 
     # compute information gain relative to the prior
-    ig = 1 / 2 * logdet(transpose(∇G) * pinv(Σ_y) * ∇G * Σ_0 + I)
+    #ig = 1 / 2 * logdet(transpose(∇G) * pinv(Σ_y) * ∇G * Σ_0 + I)
+    ig = 1 / 2 * logdet(∇G' * cholesky_solve(Σ_y, ∇G) * Σ_0 + I)
     return ig, ∇G, Σ_y, Σ_0, constrained_params, param_ordering
 end
 
-function information_gain_plus(variables_plus, variables, df, grad_method::GradientApproximationMethod)
-    df_sub = df[in.(df.variable, Ref(Set(variables))), :]
-    df_sub_plus = df[in.(df.variable, Ref(Set(variables_plus))), :]
+function subset_info_gain(sub_vars, all_vars, Σ_y, Σ_0, ∇G)
+    bool_vec = in.(all_vars, Ref(Set(sub_vars)))
 
-    constrained_params, param_ordering = constrained_and_normalized_parameters(rootdir = "output_5_cfsites")
-    Σ_0 = cov(constrained_params)
+    Σ_y_sub = Σ_y[bool_vec, bool_vec]
+    ∇G_sub = ∇G[bool_vec, :]
+    # Diagonal(1 ./ diag(Σ_y_sub)) - if we just want to rescale obs
 
-    Σ_y = observational_covariance(df_sub, variables)
-    Σ_y_plus = observational_covariance(df_sub, variables_plus)
+    #return 1 / 2 * logdet(transpose(∇G_sub) * pinv(Σ_y_sub) * ∇G_sub * Σ_0 + I) 
+    return 1 / 2 * logdet(∇G_sub' * cholesky_solve(Σ_y_sub, ∇G_sub) * Σ_0 + I)
+end
 
-    ∇G = gradient_approximation(df_sub, variables, constrained_params, param_ordering, grad_method)
-    ∇G_plus = gradient_approximation(df_sub_plus, variables, constrained_params, param_ordering, grad_method)
-    
+function subset_parameter_informedness(sub_vars, all_vars, Σ_y, Σ_0, ∇G)
+    bool_vec = in.(all_vars, Ref(Set(sub_vars)))
+    Σ_y_sub = Σ_y[bool_vec, bool_vec]
+    ∇G_sub = ∇G[bool_vec, :]
+    #return diag(transpose(∇G_sub) * pinv(Σ_y_sub) * ∇G_sub)
+    return diag(∇G_sub' * cholesky_solve(Σ_y_sub, ∇G_sub))
+end
 
-    # compute information gain of the added observation using the information over the posterior
-    ig = 1 / 2 * log(det(transpose(∇G_plus) * pinv(Σ_y_plus) * ∇G_plus + inv(Σ_0)) / det(transpose(∇G) * inv(Σ_y) * ∇G + inv(Σ_0)))
-    return ig, ∇G, ∇G_plus, Σ_y, Σ_y_plus, Σ_0
+function cholesky_solve(Σ_y, b)
+    Σ_y_reg = Symmetric(Σ_y + 1e-10 * I)
+    L = cholesky(Σ_y_reg).L
+    return L' \ (L \ b)
 end
 
 """
@@ -87,22 +94,32 @@ end
 Computes the observational covariance over all the samples and sites
 """
 function observational_covariance(df, vars)
-    #df_clean = filter(r -> !ismissing(r.statistic) && isfinite(r.statistic) && r.variable != "NaN", df)
 
+    # # 1) Keep finite stats and valid variable names
+    # df_clean = filter(r -> !ismissing(r.statistic) && isfinite(r.statistic) && r.variable != "NaN", df)
 
-    # 1) Keep finite stats and valid variable names
-    df_clean = filter(r -> !ismissing(r.statistic) && isfinite(r.statistic) && r.variable != "NaN", df)
+    # # 2) Pivot wide: each row = (site, member), each column = variable
+    # wide = unstack(df_clean, [:site, :member], :variable, :statistic)
 
-    # 2) Pivot wide: each row = (site, member), each column = variable
-    wide = unstack(df_clean, [:site, :member], :variable, :statistic)
+    # # 3) Drop rows with any missing across variable columns
+    # dropmissing!(wide, vars)
 
-    # 3) Drop rows with any missing across variable columns
-    dropmissing!(wide, vars)
+    # # 4) Data matrix: rows = observations (all sites × members), cols = variables in specified order
+    # X = Matrix(wide[:, vars]) 
 
-    # 4) Data matrix: rows = observations (all sites × members), cols = variables in specified order
+    # # 5) Pooled covariance across all observations (columns are variables)
+    # Σ = cov(X) 
+
+    df_clean = @subset(df, isfinite.(:normalized_statistic))
+
+    # group by site and remove the site mean 
+    df_clean = @transform(groupby(df_clean, [:site, :variable]), :normalized_statistic = :normalized_statistic .- mean(:normalized_statistic))
+
+    # pivot wide by site and member which are the samples 
+    wide = unstack(df_clean, [:site, :member], :variable, :normalized_statistic)
+
+    # compute the covariance across the de-meaned sites 
     X = Matrix(wide[:, vars]) 
-
-    # 5) Pooled covariance across all observations (columns are variables)
     Σ = cov(X) 
 
     return Σ
@@ -117,7 +134,7 @@ function gradient_approximation(df, variables, constrained_params, param_orderin
 
     # get regression formula 
     parameter_name_joined = join(param_ordering, "+")
-    formula_str = "statistic ~ $parameter_name_joined + fe(site)"
+    formula_str = "normalized_statistic ~ $parameter_name_joined + fe(site)"
     regression_formula = eval(Meta.parse("@formula($formula_str)"))
 
     βs = []
@@ -140,8 +157,9 @@ function gradient_approximation(df, variables, constrained_params, param_orderin
     #     end
     # end
 
-    for (i, g) in enumerate(groupby(df_joined, :variable, sort = false))
-        var = g.variable[1]
+    #for (i, g) in enumerate(groupby(df_joined, :variable, sort = false))
+    for (i, var) in enumerate(variables)
+        g = filter(:variable => ==(var), df_joined)
 
         try
             model = reg(g, regression_formula)
@@ -178,4 +196,59 @@ function get_all_variables(config::Dict, ::Config_cfsites_deep)
     end
     all_vars = vcat(all_vars, config["var_names_int"])
     return all_vars
+end
+
+
+function postprocess_dataframe(df::DataFrame)
+    @info "Filtering out NaNs"
+    #df = filter(row -> !isnan(row.statistic), df)
+    df = df[.!isnan.(df.statistic), :]
+
+    stats_unique = collect(Set(df.variable))
+
+    normalization_dict = Dict()
+
+    for stat in stats_unique
+        # get statistics of each variable
+        stats = df[df.variable .== stat, :statistic]
+        # get the mean and std of the statistics
+        mean_stat = mean(stats)
+        std_stat = std(stats)
+        if std_stat == 0 # handle case where the standard deviation is zero
+            std_stat = 1
+            mean_stat = 0
+        end
+        # store the mean and std in the normalization_dict
+        normalization_dict[stat] = (mean_stat, std_stat)
+    end
+    
+    @info "Normalizing statistics"
+    means = [normalization_dict[var][1] for var in df.variable]
+    stds = [normalization_dict[var][2] for var in df.variable]
+    @info "Got means and stds"
+    df.normalized_statistic = (df.statistic .- means) ./ stds
+    @info "Normalized statistics"
+
+    return df
+end
+
+
+### GRAVEYARD ############################################################################################################
+function information_gain_plus(variables_plus, variables, df, grad_method::GradientApproximationMethod)
+    df_sub = df[in.(df.variable, Ref(Set(variables))), :]
+    df_sub_plus = df[in.(df.variable, Ref(Set(variables_plus))), :]
+
+    constrained_params, param_ordering = constrained_and_normalized_parameters(rootdir = "output_5_cfsites")
+    Σ_0 = cov(constrained_params)
+
+    Σ_y = observational_covariance(df_sub, variables)
+    Σ_y_plus = observational_covariance(df_sub, variables_plus)
+
+    ∇G = gradient_approximation(df_sub, variables, constrained_params, param_ordering, grad_method)
+    ∇G_plus = gradient_approximation(df_sub_plus, variables, constrained_params, param_ordering, grad_method)
+    
+
+    # compute information gain of the added observation using the information over the posterior
+    ig = 1 / 2 * log(det(transpose(∇G_plus) * pinv(Σ_y_plus) * ∇G_plus + inv(Σ_0)) / det(transpose(∇G) * inv(Σ_y) * ∇G + inv(Σ_0)))
+    return ig, ∇G, ∇G_plus, Σ_y, Σ_y_plus, Σ_0
 end
