@@ -36,7 +36,10 @@ function subset_parameter_informedness(sub_vars, all_vars, Σ_y, Σ_0, ∇G)
 end
 
 function cholesky_solve(Σ_y, b)
-    Σ_y_reg = Symmetric(Σ_y + 1e-10 * I)
+    Σ_y_reg = Σ_y + 1e-10 * I
+    if !issymmetric(Σ_y)
+        Σ_y_reg = 0.5 * (Σ_y_reg + Σ_y_reg')
+    end
     L = cholesky(Σ_y_reg).L
     return L' \ (L \ b)
 end
@@ -95,21 +98,6 @@ Computes the observational covariance over all the samples and sites
 """
 function observational_covariance(df, vars)
 
-    # # 1) Keep finite stats and valid variable names
-    # df_clean = filter(r -> !ismissing(r.statistic) && isfinite(r.statistic) && r.variable != "NaN", df)
-
-    # # 2) Pivot wide: each row = (site, member), each column = variable
-    # wide = unstack(df_clean, [:site, :member], :variable, :statistic)
-
-    # # 3) Drop rows with any missing across variable columns
-    # dropmissing!(wide, vars)
-
-    # # 4) Data matrix: rows = observations (all sites × members), cols = variables in specified order
-    # X = Matrix(wide[:, vars]) 
-
-    # # 5) Pooled covariance across all observations (columns are variables)
-    # Σ = cov(X) 
-
     df_clean = @subset(df, isfinite.(:normalized_statistic))
 
     # group by site and remove the site mean 
@@ -138,25 +126,6 @@ function gradient_approximation(df, variables, constrained_params, param_orderin
     regression_formula = eval(Meta.parse("@formula($formula_str)"))
 
     βs = []
-    # for each variable we run linear regression to estimate the gradient
-    # for (i, var) in enumerate(variables) 
-    #     try 
-    #         # filter for the specific variable and compute the coefficients
-    #         df_var = filter(:variable => ==(var), df_joined)
-    #         model = reg(df_var, regression_formula)
-    #         push!(βs, coef(model))
-    #     catch e # error handling for cases where the all variables are zero for example
-    #         if e isa InterruptException
-    #             throw(e) # make sure we can escape with interrupt
-    #         else 
-    #             println("$var failed: $e")
-    #         end
-    #     end
-    #     if i % 50 ==0 # progress reporting...
-    #         @info "Processed $i/$(length(variables)) variables"
-    #     end
-    # end
-
     #for (i, g) in enumerate(groupby(df_joined, :variable, sort = false))
     for (i, var) in enumerate(variables)
         g = filter(:variable => ==(var), df_joined)
@@ -232,6 +201,18 @@ function postprocess_dataframe(df::DataFrame)
     return df
 end
 
+# helper function to create the list of variables
+function create_var_list(var_names_prof, var_names_int, z_levels)
+    all_vars = String[]
+    for var in var_names_prof
+        start, step, stop = z_levels
+        for zlev in collect(start:step:stop)
+            push!(all_vars, join([var, zlev], "_"))
+        end
+    end
+    all_vars = vcat(all_vars, var_names_int)
+    return all_vars
+end
 
 ### GRAVEYARD ############################################################################################################
 function information_gain_plus(variables_plus, variables, df, grad_method::GradientApproximationMethod)
