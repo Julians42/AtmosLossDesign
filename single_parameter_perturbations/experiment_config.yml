@@ -1,6 +1,23 @@
+#################### Data Evaluation ##############################
 var_names_int: ["pr", "rlut", "rsut", "rsutcs", "rlutcs", "lwp", "clvi", "clivi"]
 var_names_prof: ["ta", "hus", "clw", "cli", "tke", "wa", "hur", "cl"]
-z_levels: [100, 500, 1000, 1500, 2000, 2500, 3000, 4000]
-reduction_start_time: 64800
-reduction_end_time: 108000
+reduction_start_time: 345600 # 4 days 
+reduction_end_time: 950400 # 11 days - 1 week total integrated time
+
+z_levels: # [start, step, stop]
+  shallow: [100, 100, 4000]
+  deep: [100, 100, 4000]
+
+#################### Data Generation Config ###############################
+prior_path: "tomls/prior_diagnostic_pi_entr_smooth_entr_detr_coarse_amip_new.toml"
+output_dir: "spp1_cfsites"
+toml_path_name: "parameter"
+base_config_path: "diagnostic_edmfx_diurnal_scm_imp.yml"
+
+# for deep vs shallow forcing 
+forcing_toml_files:
+  shallow: "tomls/shallow_forcing_relaxation.toml"
+  deep: "tomls/deep_forcing_relaxation.toml"
+
+
 

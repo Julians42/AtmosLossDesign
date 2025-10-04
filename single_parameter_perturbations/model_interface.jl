@@ -36,8 +36,8 @@ using Distributed
     end
 end
 
-function forward_model(parameter_path, lat, lon, start_date)
-    base_config_dict = YAML.load_file(joinpath(@__DIR__, "prognostic_edmfx_tv_era5driven_column.yml"))
+function forward_model(parameter_path, lat, lon, start_date, experiment_config)
+    base_config_dict = YAML.load_file(joinpath(@__DIR__, experiment_config["base_config_path"]))
     config_dict = deepcopy(base_config_dict)
 
     # update the config_dict with site latitude / longitude
@@ -84,6 +84,7 @@ function run_iteration(
     lons,
     start_dates; 
     worker_pool = default_worker_pool(),
+    experiment_config = experiment_config,
 )
     @sync begin 
         for start_date in start_dates
@@ -94,7 +95,7 @@ function run_iteration(
                         try
                             @show worker site_index m
                             # Pass lat and lon into forward_model
-                            remotecall_wait(forward_model, worker, parameter_paths[m], lat, lon, start_date)
+                            remotecall_wait(forward_model, worker, parameter_paths[m], lat, lon, start_date, experiment_config)
                         catch e
                             @warn "Error in worker $(worker) at site $(site_index) for start date $(start_date): $(e)"
                         finally

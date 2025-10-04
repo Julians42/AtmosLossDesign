@@ -37,6 +37,7 @@ for start_date in start_dates
             "start_date" => start_date,
             "site_latitude" => lat,
             "site_longitude" => lon,
+            "era5_diurnal_warming" => 4,
         )
         # get the forcing file path 
         forcing_file_path = CA.get_external_monthly_forcing_file_path(single_parsed_args)

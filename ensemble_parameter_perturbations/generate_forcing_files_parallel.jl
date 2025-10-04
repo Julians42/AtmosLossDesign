@@ -1,13 +1,14 @@
 # Generates forcing files in parallel using Distributed.jl
 
-using Distributed
+using Distributed, ClusterManagers
 
 # Add worker processes (will be managed by SLURM)
-if nprocs() == 1
-    # Add workers based on SLURM_NTASKS or default to 40
-    n_workers = haskey(ENV, "SLURM_NTASKS") ? parse(Int, ENV["SLURM_NTASKS"]) - 1 : 60
-    addprocs(n_workers)
-end
+# if nprocs() == 1
+#     # Add workers based on SLURM_NTASKS or default to 40
+#     n_workers = haskey(ENV, "SLURM_NTASKS") ? parse(Int, ENV["SLURM_NTASKS"]) - 1 : 60
+#     addprocs(n_workers)
+# end
+addprocs_slurm(parse(Int, ENV["SLURM_NTASKS"]))
 
 @everywhere begin
     import ClimaAtmos as CA
@@ -46,6 +47,7 @@ println("Number of workers: $(nworkers())")
             "start_date" => start_date,
             "site_latitude" => lat,
             "site_longitude" => lon,
+            "era5_diurnal_warming" => 4,
         )
         
         # Get the forcing file path 

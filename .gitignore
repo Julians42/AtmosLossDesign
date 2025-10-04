@@ -5,6 +5,9 @@ figures/
 perturbed/
 multisite_perturbed/
 multiseason_smoothed/
+spp1_cfsites/
+spp1_cfsites_p4K
+old_spp1_cfsites
 *.nc
 *.txt
 *.hdf5

@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=generate_forcing_parallel
-#SBATCH --ntasks=61
+#SBATCH --nodes=10
+#SBATCH --ntasks-per-node=10
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=12G
 #SBATCH --time=01:00:00
