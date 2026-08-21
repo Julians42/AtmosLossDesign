@@ -22,9 +22,9 @@ using Measures
 using Revise
 includet("var_helper_funcs.jl")
 
-constrained_params, params_ordered = constrained_and_normalized_parameters(; 
-                                    rootdir = "../ensemble_parameter_perturbations/output_5_cfsites", 
-                                    prior_path = "../ensemble_parameter_perturbations/priors/prior_diagnostic_pi_entr_smooth_entr_detr_coarse_amip_new.toml")
+constrained_params, params_ordered = constrained_and_normalized_parameters(;
+                                    rootdir = "../ensemble_parameter_perturbations/data/output_5_cfsites",
+                                    prior_path = "../ensemble_parameter_perturbations/config/priors/prior_diagnostic_pi_entr_smooth_entr_detr_coarse_amip_new.toml")
 # probably better to eventually get it directly from here:
 # prior = CAL.get_prior("tomls/prior_diagnostic_pi_entr_smooth_entr_detr_coarse_amip_new.toml")
 Σ₀ = cov(constrained_params')
@@ -211,7 +211,7 @@ mean_gs' * Σ_θ_post_0K * mean_gs
 
 
 # use the old grad G matrix for the calculations since it is more robust 
-@load "../ensemble_parameter_perturbations/bootstrap_sites/no_bootstrap/results.jld2" full_ig ∇G Σ_y Σ_0 constrained_params param_ordering
+@load "../ensemble_parameter_perturbations/data/bootstrap_sites/no_bootstrap/results.jld2" full_ig ∇G Σ_y Σ_0 constrained_params param_ordering
 # make sure params_ordered is the same as param_ordering
 # make sure when we subset information gain we are using the right variable ordering for each experiment. 
 # make sure param ordering is the same as 

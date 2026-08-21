@@ -20,9 +20,9 @@ using Measures
 using Revise
 includet("var_helper_funcs.jl")
 
-constrained_params, params_ordered = constrained_and_normalized_parameters(; 
-                                    rootdir = "../ensemble_parameter_perturbations/output_5_cfsites", 
-                                    prior_path = "../ensemble_parameter_perturbations/priors/prior_diagnostic_pi_entr_smooth_entr_detr_coarse_amip_new.toml")
+constrained_params, params_ordered = constrained_and_normalized_parameters(;
+                                    rootdir = "../ensemble_parameter_perturbations/data/output_5_cfsites",
+                                    prior_path = "../ensemble_parameter_perturbations/config/priors/prior_diagnostic_pi_entr_smooth_entr_detr_coarse_amip_new.toml")
 # probably better to eventually get it directly from here:
 # prior = CAL.get_prior("tomls/prior_diagnostic_pi_entr_smooth_entr_detr_coarse_amip_new.toml")
 Σ₀ = cov(constrained_params')
