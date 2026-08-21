@@ -24,7 +24,8 @@ function subset_info_gain(sub_vars, all_vars, Σ_y, Σ_0, ∇G)
     # Diagonal(1 ./ diag(Σ_y_sub)) - if we just want to rescale obs
 
     #return 1 / 2 * logdet(transpose(∇G_sub) * pinv(Σ_y_sub) * ∇G_sub * Σ_0 + I) 
-    return 1 / 2 * logdet(∇G_sub' * cholesky_solve(Σ_y_sub, ∇G_sub) * Σ_0 + I)
+    #return 1 / 2 * logdet(∇G_sub' * cholesky_solve(Σ_y_sub, ∇G_sub) * Σ_0 + I)
+    return det(∇G_sub' * cholesky_solve(Σ_y_sub, ∇G_sub) + inv(Σ_0)) / det(inv(Σ_0)) - 1
 end
 
 function subset_parameter_informedness(sub_vars, all_vars, Σ_y, Σ_0, ∇G)

@@ -1,5 +1,26 @@
-using DataFrames
+import EnsembleKalmanProcesses as EKP
+import YAML
+import ClimaCalibrate as CAL
+using Statistics
 using CairoMakie
+using DataFrames
+using DataFramesMeta
+import CSV
+using LinearAlgebra
+using FixedEffectModels
+import TOML
+using Glob
+using JLD2
+using ColorSchemes
+
+include("new_helper_funcs.jl")
+
+# load the config
+config = YAML.load_file("experiment_config.yml")
+all_variables = get_all_variables(config, Config_cfsites_deep())
+
+@load "bootstrap_sites/no_bootstrap/results.jld2" full_ig ∇G Σ_y Σ_0 constrained_params param_ordering
+
 
 resolutions = [100, 200, 300, 400, 500, 800, 1000, 1300, 2000]
 
@@ -41,18 +62,20 @@ end
 ig_df.n_points = floor.(4000 ./ ig_df.resolution)
 
 # Plot: resolution on x-axis, IG on y-axis, one line per variable with legend
-fig = Figure(size = (900, 500))
-ax = Axis(fig[1, 1]; xlabel = "Observations below 4000m", ylabel = "Information Gain", title = "Measurement resolution effect on calibratable information",
-          xlabelsize = 14, ylabelsize = 14, xticklabelsize = 12, yticklabelsize = 12)
+fig = Figure(size = (500, 500))
+ax = Axis(fig[1, 1]; 
+        xlabel = "Number of Observations below 4000m", 
+        ylabel = "Parameter Uncertainty Reduction (%)    ", 
+        xlabelsize = 20, 
+        ylabelsize = 20, 
+        xticklabelsize = 16, 
+        yticklabelsize = 16,
+        xgridvisible = false,
+        ygridvisible = false,
+)
+hidespines!(ax, :t, :r)
 
-# for var in vars_of_interest
-#     sub = ig_df[ig_df.var .== var, :]
-#     if nrow(sub) == 0
-#         continue
-#     end
-#     sub_sorted = sort(sub, :n_points)
-#     lines!(ax, sub_sorted.n_points, sub_sorted.ig; label = var)
-# end
+scale = 100
 palette = ColorSchemes.tab10
 for (i, var) in enumerate(vars_of_interest)
     sub = ig_df[ig_df.var .== var, :]
@@ -60,14 +83,14 @@ for (i, var) in enumerate(vars_of_interest)
         continue
     end
     sub_sorted = sort(sub, :n_points)
-    lines!(ax, sub_sorted.n_points, sub_sorted.ig;
+    lines!(ax, sub_sorted.n_points, sub_sorted.ig .* scale;
         label = var,
         color = palette[i],
         linewidth = 3, # bolder
     )
 end
 
-axislegend(ax, position = :lt)
+axislegend(ax, position = :lt, framevisible = false)
 save("plots/resolution_information_gain.png", fig)
 
 

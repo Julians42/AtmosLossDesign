@@ -60,45 +60,46 @@ param_df = @orderby(param_df, -:learnability) # order by parameter learnability
 
 # editable short-name map for long parameter names
 short_name_map = Dict(
-    "mixing_length_tke_surf_flux_coeff" => "ml_tke_flux",
-    "mixing_length_diss_coeff" => "ml_diss",
-    "precipitation_timescale" => "precip_tau",
-    "entr_param_vec_1" => "entr1",
-    "entr_param_vec_2" => "entr2",
-    "entr_param_vec_3" => "entr3",
-    "entr_param_vec_4" => "entr4",
-    "entr_param_vec_5" => "entr5",
-    "entr_param_vec_6" => "entr6",
-    "EDMF_surface_area" => "EDMF_area",
-    "mixing_length_eddy_viscosity_coefficient" => "ml_eddy_visc",
-    "pressure_normalmode_drag_coeff" => "p_drag",
-    "mixing_length_Prandtl_number_0" => "Pr0",
-    "entr_mult_limiter_coeff" => "entr_lim",
-    "entr_inv_tau" => "entr_inv_tau",
-    "mixing_length_static_stab_coeff" => "ml_static_stab",
-    "pressure_normalmode_buoy_coeff1" => "p_buoy1",
+    "mixing_length_tke_surf_flux_coeff"        => L"l_{\mathrm{tke, surf}}",
+    "mixing_length_diss_coeff"                 => L"D_\kappa",
+    "precipitation_timescale"                  => L"\tau_p",
+    "entr_param_vec_1"                         => L"\Pi_1",
+    "entr_param_vec_2"                         => L"\Pi_2",
+    "entr_param_vec_3"                         => L"\Pi_3",
+    "entr_param_vec_4"                         => L"\Pi_4",
+    "entr_param_vec_5"                         => L"\Pi_5",
+    "entr_param_vec_6"                         => L"\Pi_6",
+    "entr_inv_tau"                             => L"\tau_{\mathrm{entr}}^{-1}",
+    "EDMF_surface_area"                        => L"a_{\mathrm{up,surf}}",
+    "mixing_length_eddy_viscosity_coefficient" => L"l_{\mathrm{ev}}",
+    "pressure_normalmode_drag_coeff"           => L"P_d",
+    "mixing_length_Prandtl_number_0"           => L"\mathrm{Pr}_0",
+    "entr_mult_limiter_coeff"                  => L"\lambda_{\mathrm{entr}}",
+    "mixing_length_static_stab_coeff"          => L"l_{\mathrm{stab}}",
+    "pressure_normalmode_buoy_coeff1"          => L"b_1",
 )
 param_df.short_name = [get(short_name_map, s, s) for s in param_df.parameter]
 
 ################################################################################
-fig = Figure(size = (1000, 500))
+# fig = Figure(size = (1000, 500))
 
-# variable IG (vertical bars)
-ax = Axis(fig[1, 1]; xticklabelrotation = π/2, ylabel = "Single Variable Information Gain", xlabel = "Variable",
-          xlabelsize = 16, ylabelsize = 16, xticklabelsize = 12, yticklabelsize = 12)
-xs = 1:length(vals_sorted)
-barplot!(ax, xs, vals_sorted; color = :steelblue, alpha = 1., strokecolor= :black, strokewidth = 2)
-ax.xticks = (xs, names_sorted)
+# # variable IG (vertical bars)
+# ax = Axis(fig[1, 1]; xticklabelrotation = π/2, ylabel = "Single Variable Information Gain", xlabel = "Variable",
+#           xlabelsize = 16, ylabelsize = 16, xticklabelsize = 12, yticklabelsize = 12,
+#           xgridvisible = false, ygridvisible = false)
+# xs = 1:length(vals_sorted)
+# barplot!(ax, xs, vals_sorted; color = :steelblue, alpha = 1., strokecolor= :black, strokewidth = 2)
+# ax.xticks = (xs, names_sorted)
 
-# parameter informedness (horizontal bars with short labels)
-ax2 = Axis(fig[1, 2]; xticklabelrotation = π/2, xlabel = "Parameter", ylabel = "Normalized Full Sample Parameter Informedness",
-           xlabelsize = 16, ylabelsize = 16, xticklabelsize = 11, yticklabelsize = 11)
+# # parameter informedness (horizontal bars with short labels)
+# ax2 = Axis(fig[1, 2]; xticklabelrotation = π/2, xlabel = "Parameter", ylabel = "Normalized Full Sample Parameter Informedness",
+#            xlabelsize = 16, ylabelsize = 16, xticklabelsize = 11, yticklabelsize = 11)
 
-xs2 = 1:length(sub_pi_sorted)
-barplot!(ax2, xs2, sub_pi_sorted / norm(sub_pi_sorted, 1); color = :seagreen, alpha = 1., strokecolor= :black, strokewidth = 2)
-ax2.xticks = (xs2, param_labels_short)
+# xs2 = 1:length(sub_pi_sorted)
+# barplot!(ax2, xs2, sub_pi_sorted / norm(sub_pi_sorted, 1); color = :seagreen, alpha = 1., strokecolor= :black, strokewidth = 2)
+# ax2.xticks = (xs2, param_labels_short)
 
-save("plots/marginal_info_gain_full_resolution.png", fig)
+# save("plots/marginal_info_gain_full_resolution.png", fig)
 
 ################################################################################
 # Quantify uncertainty using the bootstrap sites
@@ -179,17 +180,21 @@ fig = Figure(size = (1200, 400))
 
 ax = Axis(fig[1, 1]; 
         xticklabelrotation = π/2, 
-        ylabel = "Single Variable Information Gain", 
-        xlabel = "Variable",
-        xlabelsize = 16, 
-        ylabelsize = 16, 
-        xticklabelsize = 12, 
-        yticklabelsize = 12
+        ylabel = "Parameter Uncertainty Reduction (%)       ", 
+        xlabel = "Variable Observed",
+        xlabelsize = 20, 
+        ylabelsize = 20, 
+        xticklabelsize = 16, 
+        yticklabelsize = 16,
+        xgridvisible = false,
+        ygridvisible = false,
+        # ylabelpadding = 40,
 )
-
+# translate!(ax.ylabel, 0, -30)
+scale = 100
 barplot!(ax, 
         1:length(marginal_ig_uq.ig), 
-        marginal_ig_uq.ig; 
+        marginal_ig_uq.ig * scale; 
         color = :steelblue, 
         alpha = 1., 
         strokecolor=:black, 
@@ -197,25 +202,28 @@ barplot!(ax,
 )
 errorbars!(ax, 
         1:length(marginal_ig_uq.ig), 
-        marginal_ig_uq.ig, 
-        marginal_ig_uq.ig_std .* 1.96,  
-        marginal_ig_uq.ig_std .* 1.96; 
+        marginal_ig_uq.ig * scale, 
+        marginal_ig_uq.ig_std .* 1.96 .* scale,  
+        marginal_ig_uq.ig_std .* 1.96 .* scale; 
         color = :black, 
         whiskerwidth = 10
 )
 ax.xticks = (1:length(marginal_ig_uq.ig), marginal_ig_uq.var)
-
+hidespines!(ax, :t, :r)
 
 # parameter informedness (horizontal bars with short labels)
 ax2 = Axis(fig[1, 2]; 
-        xticklabelrotation = π/2, 
+        #xticklabelrotation = π/2, 
         xlabel = "Parameter", 
-        ylabel = "Normalized Parameter Learnability",
-        xlabelsize = 16, 
-        ylabelsize = 16, 
-        xticklabelsize = 11, 
-        yticklabelsize = 11
+        ylabel = "Learnability",
+        xlabelsize = 20, 
+        ylabelsize = 20, 
+        xticklabelsize = 16, 
+        yticklabelsize = 16,
+        xgridvisible = false,
+        ygridvisible = false,
 )
+hidespines!(ax2, :t, :r)
 
 barplot!(ax2, 
         1:length(parameter_uq.learnability), 

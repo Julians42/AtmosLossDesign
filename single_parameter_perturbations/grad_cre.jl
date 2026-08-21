@@ -1,4 +1,4 @@
-# compute the gradient with respect to CRE for each parameter perturbation
+# GENERATES APPLICATION FIGURE of gradients of CRE with respect to parameter perturbations
 
 import YAML
 import JLD2
@@ -9,6 +9,9 @@ using ClimaAnalysis
 using DataFrames
 using CSV
 using NaNStatistics
+using StatsPlots
+using StatsBase
+using CategoricalArrays
 
 # want a vector with d(CRE)/d(param_i) for each parameter if
 # we have CRE(param_i + delta) and CRE(param_i - delta)
@@ -50,6 +53,8 @@ paths4K_filtered = filter(path -> any(occursin.(common_sites, path)) & any(occur
 paths0K_simdirs = joinpath.("spp1_cfsites", paths0K_filtered, "output_active")
 paths4K_simdirs = joinpath.("spp1_cfsites_p4K", paths4K_filtered, "output_active")
 
+
+######## Only need if recomputing CREs ########
 function compute_cre(path, config = config)
     try
         sim_dir = SimDir(path)
@@ -102,23 +107,10 @@ for (i, path) in enumerate(paths4K_filtered)
 end
 
 CSV.write("dataframes/spp1_cfsites_intersect2.csv", df)
+######## End recomputing CREs ########
 
+####### Compute Gradients ########
 df = CSV.read("dataframes/spp1_cfsites_intersect2.csv", DataFrame)
-
-
-# params = unique(df.param)
-
-# val_df = filter(rows -> (rows.site == site) & (rows.param == param), df)
-# cre_param_low_scen_0k = filter(row -> (row.perturb == 0.25) & (row.scenario == "0K"), val_df).cre[1]
-# cre_param_high_scen_0k = filter(row -> (row.perturb == 0.75) & (row.scenario == "0K"), val_df).cre[1]
-# cre_param_low_scen_4k = filter(row -> (row.perturb == 0.25) & (row.scenario == "4K"), val_df).cre[1]
-# cre_param_high_scen_4k = filter(row -> (row.perturb == 0.75) & (row.scenario == "4K"), val_df).cre[1]
-
-# ΔCRE_param_low = cre_param_low_scen_4k - cre_param_low_scen_0k
-# ΔCRE_param_high = cre_param_high_scen_4k - cre_param_high_scen_0k
-
-# dΔCRE_dparam = (ΔCRE_param_high - ΔCRE_param_low)
-
 
 function get_dcre_dparam(df, site, param)
     sub_df = filter(rows -> (rows.site == site) & (rows.param == param), df)
@@ -147,7 +139,6 @@ filter!(:dcre_dparam => isfinite, dcre_df)
 # focus on only tropical low clouds 
 t = transform(dcre_df, :site => ByRow(x -> split(x, "_")) => [:lat, :lon, :site_date])
 transform!(t, [:lat, :lon, :site_date] => ByRow((lat, lon, site_date) -> (parse(Float64, lat), parse(Float64, lon), convert(String, site_date))) => [:lat, :lon, :site_date])
-
 filter!(row -> (abs(row.lat) <= 30.0), t)
 
 # see the mean effect for each param 
@@ -157,7 +148,7 @@ by_param2 = combine(groupby(t, :param)) do sdf
 end
 
 
-
+####### Visualize Bootstrapped gradients ########
 short_name_map = Dict(
     "mixing_length_tke_surf_flux_coeff"        => L"l_{\mathrm{tke, surf}}",
     "mixing_length_diss_coeff"                 => L"D_\kappa",
@@ -184,26 +175,23 @@ params = [g.param[1] for g in groups]
 data = [g.dcre_dparam[:] for g in groups]
 labels = [get(short_name_map, p, p) for p in params]
 
-using StatsPlots
-using StatsBase
+# plt = StatsPlots.boxplot(data;
+#     #label = labels,         # legend labels
+#     xticks = (1:length(labels), labels),  # x-axis tick positions + labels
+#     xlabel = "Parameter",
+#     ylabel = "ΔCRE over Parameter IQR (W/m²)",
+#     title = "Distribution by Parameter",
+#     legend = false,
+#     linewidth = 2,
+#     color = :royalblue,
+#     mediancolor = :white,
+#     whisker_width = 0.5,
+#     outliercolor = :red,
+#     ylims = (-5, 5)
+# )
 
-plt = StatsPlots.boxplot(data;
-    #label = labels,         # legend labels
-    xticks = (1:length(labels), labels),  # x-axis tick positions + labels
-    xlabel = "Parameter",
-    ylabel = "ΔCRE over Parameter IQR (W/m²)",
-    title = "Distribution by Parameter",
-    legend = false,
-    linewidth = 2,
-    color = :royalblue,
-    mediancolor = :white,
-    whisker_width = 0.5,
-    outliercolor = :red,
-    ylims = (-5, 5)
-)
-
-# Save to file (png/pdf/svg etc.)
-savefig(plt, "figures/grads/boxplot.png")
+# # Save to file (png/pdf/svg etc.)
+# savefig(plt, "figures/grads/boxplot.png")
 
 df_samples = []
 for i in 1:1000
@@ -242,18 +230,18 @@ summaries = combine(groupby(df_all, :param)) do sdf
     q90 = quantile(sdf.mean_dcre_dparam, [0.05, 0.95])
     q95 = quantile(sdf.mean_dcre_dparam, [0.025, 0.975])
     sig_level = if !(q95[1] <= 0 <= q95[2])
-        "95% significant"
+        "95% CI excludes 0"
     elseif !(q90[1] <= 0 <= q90[2])
-        "90% significant"
+        "90% CI excludes 0"
     else
-        "insignificant"
+        "CI includes 0"
     end
     (; param = first(sdf.param), mean = μ, sig_level)
 end
 
 
 # --- 2. Order parameters by mean effect size
-ordered_params = sort(summaries, :mean).param
+ordered_params = sort(summaries, :mean, rev = true).param
 sorted_labels = [get(short_name_map, p, p) for p in ordered_params]
 
 # --- 3. Map to categorical variable for safe ordering
@@ -262,9 +250,9 @@ df_all.param = CategoricalArray(df_all.param;
 
 # --- 4. Define color map (light if not influential)
 palette = Dict(
-    "95% significant" => :royalblue,
-    "90% significant" => :cornflowerblue,
-    "insignificant"   => :lightgray
+    "95% CI excludes 0" => :royalblue,
+    "90% CI excludes 0" => :cornflowerblue,
+    "CI includes 0"   => :lightgray
 )
 
 df_all.sig_level = [summaries[summaries.param .== p, :sig_level][1] for p in df_all.param]
@@ -278,15 +266,29 @@ df_all.color = [palette[s] for s in df_all.sig_level]
     xticks = (1:length(sorted_labels), sorted_labels),
     mediancolor = :white,
     whisker_width = 0.5,
-    legend = :topleft,
+    legend = :topright,
     xlabel = "Parameter",
-    ylabel = "Mean ΔCRE / Δparam (W/m²)",
-    title = "Sensitivity of Tropical +4K ΔCRE to Param Perturbations",
+    ylabel = "Sensitivity of ΔCRE to \nParameter Uncertainty (W/m²)",
+    #title = "Sensitivity of Tropical +4K ΔCRE to Param Perturbations",
     dpi = 300,
     label = "",
+    grid = false,
+    legend_background_color = :transparent,
+    legend_foreground_color = :transparent,
+    legend_borderalpha = 0,
+    xtickfontsize = 10, 
+    ytickfontsize = 10,
+    legend_font_pointsize = 11,
+    yguidefontsize = 12,
+    xguidefontsize = 12,
 )
+hline!([0], linestyle = :solid, color = :black, linewidth = 1, label = "")
+
 
 for (label, col) in palette
+    if label == "CI includes 0"
+        continue
+    end
     StatsPlots.plot!([NaN], [NaN];
         seriestype = :scatter,
         markerstrokecolor = :transparent,
