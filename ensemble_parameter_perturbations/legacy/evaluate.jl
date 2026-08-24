@@ -94,6 +94,12 @@ all_configs = Dict("full_variables" =>
 
 
 for (key, value) in all_configs
+    # all of these already exist as globals from the single-config run above -
+    # without this declaration each would be treated as a new loop-local
+    # variable (Julia's top-level "soft scope" ambiguity) instead of updating
+    # the existing global.
+    global informing_variables, reg_coefs, coef_names, failed_indices, eigs
+    global sorted_var_vals, sorted_var_inds, sorted_var_names
 
     informing_variables = get_all_variables(value, Config_cfsites())
     println(length(informing_variables), " variables")

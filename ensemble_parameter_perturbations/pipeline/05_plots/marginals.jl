@@ -27,8 +27,7 @@ resolve_config_paths!(config, PROJECT_ROOT)
 all_variables = get_all_variables(config, Config_cfsites_deep())
 
 @load joinpath(PROJECT_ROOT, "data", "bootstrap_sites", "no_bootstrap", "results.jld2") full_ig ∇G Σ_y Σ_0 constrained_params param_ordering
-using Infiltrator 
-Main.@infiltrate
+
 marginal_info_gain = DataFrame(var = [], ig = [])
 for variable in ["pr", "rlut", "rsut", "rsutcs", "rlutcs", "lwp", "clvi", "clivi", "dsevi"]
     single_var_config = Dict("var_names_int" => [variable],
@@ -84,64 +83,87 @@ param_df.short_name = [get(short_name_map, s, s) for s in param_df.parameter]
 
 ################################################################################
 # Quantify uncertainty using the bootstrap sites. `marginals_bootstrap.csv` and
-# `param_informedness_uncertainty.csv` are resumable caches: re-running this
-# script will only append the bootstrap indices that haven't been processed
-# yet if the caches already contain some, since the loops below start from a
-# fresh column read - to force a full recompute, delete the two cache files.
+# `param_informedness_uncertainty.csv` are resumable caches: each loop below
+# only computes the bootstrap indices in `bootstrap_range` that are NOT
+# already present in the cache's `:bootstrap` column, so a re-run against a
+# cache that already covers `bootstrap_range` skips the (slow) loop entirely
+# rather than recomputing it. Delete a cache file to force a full recompute
+# of that piece.
 cache_dir = joinpath(PROJECT_ROOT, "data", "cache")
 mkpath(cache_dir)
 marginals_bootstrap_csv = joinpath(cache_dir, "marginals_bootstrap.csv")
 param_informedness_csv = joinpath(cache_dir, "param_informedness_uncertainty.csv")
 
+bootstrap_range = 1:100
+
 uncertainty_df = isfile(marginals_bootstrap_csv) ? CSV.read(marginals_bootstrap_csv, DataFrame) : DataFrame(var=String[], ig=Float64[], bootstrap=Int[])
+missing_boot_i = setdiff(bootstrap_range, unique(uncertainty_df.bootstrap))
 
-for boot_i in 50:100
-    @load joinpath(PROJECT_ROOT, "data", "bootstrap_sites", "bootstrap_$(boot_i)", "results.jld2") full_ig ∇G Σ_y Σ_0 constrained_params param_ordering
-    # integrated variables
-    for variable in ["pr", "rlut", "rsut", "rsutcs", "rlutcs", "lwp", "clvi", "clivi", "dsevi"]
-        single_var_config = Dict("var_names_int" => [variable],
-                                "var_names_prof" => [],
-                                "z_levels" => Dict("shallow" => [100, 100, 4000],
-                                                   "deep" => [100, 100, 4000]),
-                                "exp_name" => "single_var_$(variable)")
-        single_var_levels = get_all_variables(single_var_config, Config_cfsites_deep())
-        sub_ig = subset_info_gain(single_var_levels, all_variables, Σ_y, Σ_0, ∇G)
-        push!(uncertainty_df, (var=variable, ig=sub_ig, bootstrap = boot_i))
-    end
+if isempty(missing_boot_i)
+    @info "marginals_bootstrap.csv already covers bootstrap $(bootstrap_range) - skipping"
+else
+    @info "Computing marginal info gain for bootstrap indices $(missing_boot_i)"
+    for boot_i in missing_boot_i
+        # `full_ig` etc. already exist as globals from the @load above - without
+        # this declaration, @load's assignments would be treated as new locals
+        # scoped to this loop (Julia's top-level "soft scope" ambiguity) and
+        # silently discarded once the loop ends.
+        global full_ig, ∇G, Σ_y, Σ_0, constrained_params, param_ordering
+        @load joinpath(PROJECT_ROOT, "data", "bootstrap_sites", "bootstrap_$(boot_i)", "results.jld2") full_ig ∇G Σ_y Σ_0 constrained_params param_ordering
+        # integrated variables
+        for variable in ["pr", "rlut", "rsut", "rsutcs", "rlutcs", "lwp", "clvi", "clivi", "dsevi"]
+            single_var_config = Dict("var_names_int" => [variable],
+                                    "var_names_prof" => [],
+                                    "z_levels" => Dict("shallow" => [100, 100, 4000],
+                                                       "deep" => [100, 100, 4000]),
+                                    "exp_name" => "single_var_$(variable)")
+            single_var_levels = get_all_variables(single_var_config, Config_cfsites_deep())
+            sub_ig = subset_info_gain(single_var_levels, all_variables, Σ_y, Σ_0, ∇G)
+            push!(uncertainty_df, (var=variable, ig=sub_ig, bootstrap = boot_i))
+        end
 
-    # profile variables
-    for variable in ["ta", "hus", "clw", "cli", "tke", "wa", "hur", "cl", "arup", "entr"]
-        single_var_config = Dict("var_names_int" => [],
-                                "var_names_prof" => [variable],
-                                "z_levels" => Dict("shallow" => [100, 100, 4000],
-                                                   "deep" => [100, 100, 4000]),
-                                "exp_name" => "single_var_$(variable)")
-        single_var_levels = get_all_variables(single_var_config, Config_cfsites_deep())
-        sub_ig = subset_info_gain(single_var_levels, all_variables, Σ_y, Σ_0, ∇G)
-        push!(uncertainty_df, (var=variable, ig=sub_ig, bootstrap = boot_i))
+        # profile variables
+        for variable in ["ta", "hus", "clw", "cli", "tke", "wa", "hur", "cl", "arup", "entr"]
+            single_var_config = Dict("var_names_int" => [],
+                                    "var_names_prof" => [variable],
+                                    "z_levels" => Dict("shallow" => [100, 100, 4000],
+                                                       "deep" => [100, 100, 4000]),
+                                    "exp_name" => "single_var_$(variable)")
+            single_var_levels = get_all_variables(single_var_config, Config_cfsites_deep())
+            sub_ig = subset_info_gain(single_var_levels, all_variables, Σ_y, Σ_0, ∇G)
+            push!(uncertainty_df, (var=variable, ig=sub_ig, bootstrap = boot_i))
+        end
+        @info "Processed bootstrap $boot_i"
     end
-    @info "Processed bootstrap $boot_i"
+    CSV.write(marginals_bootstrap_csv, uncertainty_df)
 end
-
-CSV.write(marginals_bootstrap_csv, uncertainty_df)
 
 ################################################################################
 # Get the uncertainty of the parameter informedness
-param_informedness_uncertainty = DataFrame(parameter=String[], informedness=Float64[], bootstrap=Int[])
-for boot_i in 1:100
-    @load joinpath(PROJECT_ROOT, "data", "bootstrap_sites", "bootstrap_$(boot_i)", "results.jld2") full_ig ∇G Σ_y Σ_0 constrained_params param_ordering
+param_informedness_uncertainty = isfile(param_informedness_csv) ? CSV.read(param_informedness_csv, DataFrame) : DataFrame(parameter=String[], informedness=Float64[], bootstrap=Int[])
+missing_boot_i_pi = setdiff(bootstrap_range, unique(param_informedness_uncertainty.bootstrap))
 
-    sub_pi = subset_parameter_informedness(all_variables, all_variables, Σ_y, Σ_0, ∇G)
+if isempty(missing_boot_i_pi)
+    @info "param_informedness_uncertainty.csv already covers bootstrap $(bootstrap_range) - skipping"
+else
+    @info "Computing parameter informedness for bootstrap indices $(missing_boot_i_pi)"
+    for boot_i in missing_boot_i_pi
+        # see the comment on the identical `global` declaration above
+        global full_ig, ∇G, Σ_y, Σ_0, constrained_params, param_ordering, sub_pi, param_informedness_uncertainty
+        @load joinpath(PROJECT_ROOT, "data", "bootstrap_sites", "bootstrap_$(boot_i)", "results.jld2") full_ig ∇G Σ_y Σ_0 constrained_params param_ordering
 
-    mini_df = DataFrame(parameter = param_ordering, informedness = sub_pi, bootstrap = repeat([boot_i], length(param_ordering)))
+        sub_pi = subset_parameter_informedness(all_variables, all_variables, Σ_y, Σ_0, ∇G)
 
-    param_informedness_uncertainty = vcat(param_informedness_uncertainty, mini_df)
+        mini_df = DataFrame(parameter = param_ordering, informedness = sub_pi, bootstrap = repeat([boot_i], length(param_ordering)))
+
+        param_informedness_uncertainty = vcat(param_informedness_uncertainty, mini_df)
+    end
+    CSV.write(param_informedness_csv, param_informedness_uncertainty)
 end
-CSV.write(param_informedness_csv, param_informedness_uncertainty)
 
 ################################################################################
 # Plot the marginal information gain with error bars from the bootstrap sites
-
+@info "Plotting..."
 uncertainty_df = CSV.read(marginals_bootstrap_csv, DataFrame)
 param_informedness_uncertainty = CSV.read(param_informedness_csv, DataFrame)
 

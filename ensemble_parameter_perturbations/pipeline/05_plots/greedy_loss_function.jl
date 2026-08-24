@@ -121,6 +121,13 @@ basic_config = Dict(
 
 ig_df_bootstrap = isfile(greedy_loss_function_bootstrap_csv) ? CSV.read(greedy_loss_function_bootstrap_csv, DataFrame) : DataFrame(iter=Int[], var=String[], ig=Float64[], bootstrap=Int[])
 for boot_i in 72:100
+    # All of these already exist as globals from the non-bootstrap pass above
+    # (including inside the nested `while` loop below) - without this
+    # declaration, Julia's top-level "soft scope" rules would treat each
+    # reassignment as a new loop-local variable instead of updating the
+    # existing global, silently discarding the accumulated state.
+    global full_ig, ∇G, Σ_y, Σ_0, constrained_params, param_ordering
+    global remaining_var_roots, ordered_best_list, iter, ig_iter_value, best_new_var, best_ig
     @load joinpath(PROJECT_ROOT, "data", "bootstrap_sites", "bootstrap_$boot_i", "results.jld2") full_ig ∇G Σ_y Σ_0 constrained_params param_ordering
 
     remaining_var_roots = copy(all_var_roots)
